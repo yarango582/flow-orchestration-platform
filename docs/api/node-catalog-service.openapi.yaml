@@ -1,0 +1,597 @@
+openapi: 3.0.3
+info:
+  title: Node Catalog Service API
+  description: API para la gestión del catálogo de nodos y matriz de compatibilidad
+  version: 0.1.0
+  contact:
+    name: Flow Platform Team
+    email: flow-platform@company.com
+
+servers:
+  - url: http://localhost:3003/api/v1
+    description: Development server
+  - url: https://flow-platform.company.com/catalog/api/v1
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /nodes:
+    get:
+      summary: Obtener catálogo de nodos
+      description: Recupera la lista de nodos disponibles con filtros
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [database, transformation, external-api, notification, storage, logic]
+        - name: version
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        '200':
+          description: Catálogo de nodos recuperado
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeDefinition'
+
+    post:
+      summary: Registrar nuevo nodo
+      description: Registra un nuevo tipo de nodo en el catálogo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNodeRequest'
+            example:
+              type: "postgresql-query"
+              name: "PostgreSQL Query"
+              description: "Ejecuta consultas SQL en base de datos PostgreSQL"
+              version: "1.0.0"
+              category: "database"
+              inputs:
+                - name: "connectionString"
+                  type: "string"
+                  required: true
+                  description: "Cadena de conexión a PostgreSQL"
+                - name: "query"
+                  type: "string"
+                  required: true
+                  description: "Consulta SQL a ejecutar"
+                - name: "parameters"
+                  type: "array"
+                  required: false
+                  description: "Parámetros de la consulta"
+              outputs:
+                - name: "result"
+                  type: "array"
+                  description: "Resultados de la consulta"
+                - name: "rowCount"
+                  type: "number"
+                  description: "Número de filas retornadas"
+              compatibilityMatrix:
+                - targetType: "data-filter"
+                  outputPin: "result"
+                  targetInputPin: "data"
+                  compatibility: "full"
+                - targetType: "data-mapper"
+                  outputPin: "result"
+                  targetInputPin: "source"
+                  compatibility: "full"
+      responses:
+        '201':
+          description: Nodo registrado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDefinition'
+        '409':
+          description: Nodo con el mismo tipo y versión ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /nodes/{type}:
+    get:
+      summary: Obtener nodo por tipo
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+          description: "Versión específica, por defecto la más reciente"
+      responses:
+        '200':
+          description: Definición del nodo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDefinition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /nodes/{type}/versions:
+    get:
+      summary: Obtener versiones de un nodo
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de versiones del nodo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeVersion'
+
+  /nodes/{type}/compatibility:
+    get:
+      summary: Obtener matriz de compatibilidad de un nodo
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Matriz de compatibilidad del nodo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompatibilityRule'
+
+  /compatibility/check:
+    post:
+      summary: Verificar compatibilidad entre nodos
+      description: Verifica si dos nodos pueden conectarse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceNode, targetNode, connection]
+              properties:
+                sourceNode:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    version:
+                      type: string
+                targetNode:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    version:
+                      type: string
+                connection:
+                  type: object
+                  properties:
+                    outputPin:
+                      type: string
+                    inputPin:
+                      type: string
+            example:
+              sourceNode:
+                type: "postgresql-query"
+                version: "1.0.0"
+              targetNode:
+                type: "data-filter"
+                version: "1.0.0"
+              connection:
+                outputPin: "result"
+                inputPin: "data"
+      responses:
+        '200':
+          description: Resultado de verificación de compatibilidad
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompatibilityCheck'
+
+  /compatibility/matrix:
+    get:
+      summary: Obtener matriz completa de compatibilidad
+      description: Recupera la matriz global de compatibilidad entre todos los nodos
+      responses:
+        '200':
+          description: Matriz de compatibilidad global
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CompatibilityRule'
+
+  /categories:
+    get:
+      summary: Obtener categorías de nodos
+      responses:
+        '200':
+          description: Lista de categorías disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeCategory'
+
+  /health:
+    get:
+      summary: Health check del servicio
+      security: []
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    NodeDefinition:
+      type: object
+      required: [type, name, version, category, inputs, outputs, compatibilityMatrix]
+      properties:
+        type:
+          type: string
+          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        version:
+          type: string
+          pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+        category:
+          $ref: '#/components/schemas/NodeCategoryEnum'
+        icon:
+          type: string
+          description: "URL del icono del nodo"
+        inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeInput'
+        outputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeOutput'
+        compatibilityMatrix:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompatibilityRule'
+        configuration:
+          $ref: '#/components/schemas/NodeConfiguration'
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NodeInput:
+      type: object
+      required: [name, type, required]
+      properties:
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/DataType'
+        required:
+          type: boolean
+        description:
+          type: string
+        defaultValue:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: array
+            - type: object
+        validation:
+          $ref: '#/components/schemas/ValidationRules'
+
+    NodeOutput:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/DataType'
+        description:
+          type: string
+        schema:
+          type: object
+          description: "JSON Schema para el output"
+
+    CompatibilityRule:
+      type: object
+      required: [targetType, outputPin, targetInputPin, compatibility]
+      properties:
+        targetType:
+          type: string
+        outputPin:
+          type: string
+        targetInputPin:
+          type: string
+        compatibility:
+          type: string
+          enum: [full, partial, conditional, none]
+        conditions:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              operator:
+                type: string
+                enum: [equals, not_equals, greater_than, less_than, contains]
+              value:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+        transformations:
+          type: array
+          items:
+            type: object
+            properties:
+              from:
+                type: string
+              to:
+                type: string
+              function:
+                type: string
+
+    NodeConfiguration:
+      type: object
+      properties:
+        timeout:
+          type: integer
+          minimum: 1
+          default: 30000
+          description: "Timeout en milisegundos"
+        retries:
+          type: integer
+          minimum: 0
+          maximum: 5
+          default: 0
+        concurrency:
+          type: integer
+          minimum: 1
+          default: 1
+        batchSize:
+          type: integer
+          minimum: 1
+          default: 100
+
+    DataType:
+      type: string
+      enum: [string, number, boolean, array, object, date, binary, any]
+
+    ValidationRules:
+      type: object
+      properties:
+        minLength:
+          type: integer
+        maxLength:
+          type: integer
+        pattern:
+          type: string
+        minimum:
+          type: number
+        maximum:
+          type: number
+        enum:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+
+    NodeVersion:
+      type: object
+      properties:
+        version:
+          type: string
+        releaseDate:
+          type: string
+          format: date-time
+        changelog:
+          type: string
+        deprecated:
+          type: boolean
+          default: false
+        breaking:
+          type: boolean
+          default: false
+
+    NodeCategory:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        nodeCount:
+          type: integer
+
+    NodeCategoryEnum:
+      type: string
+      enum: [database, transformation, external-api, notification, storage, logic, ai-ml]
+
+    CreateNodeRequest:
+      type: object
+      required: [type, name, version, category, inputs, outputs, compatibilityMatrix]
+      properties:
+        type:
+          type: string
+          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        version:
+          type: string
+          pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+        category:
+          $ref: '#/components/schemas/NodeCategoryEnum'
+        icon:
+          type: string
+        inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeInput'
+        outputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeOutput'
+        compatibilityMatrix:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompatibilityRule'
+        configuration:
+          $ref: '#/components/schemas/NodeConfiguration'
+        metadata:
+          type: object
+          additionalProperties: true
+
+    CompatibilityCheck:
+      type: object
+      properties:
+        compatible:
+          type: boolean
+        compatibility:
+          type: string
+          enum: [full, partial, conditional, none]
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [error, warning, info]
+              message:
+                type: string
+              field:
+                type: string
+        requiredTransformations:
+          type: array
+          items:
+            type: object
+            properties:
+              from:
+                type: string
+              to:
+                type: string
+              transformation:
+                type: string
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        dependencies:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [healthy, unhealthy]
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: No autorizado - token inválido o faltante
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

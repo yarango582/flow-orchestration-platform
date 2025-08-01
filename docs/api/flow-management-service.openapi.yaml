@@ -1,0 +1,533 @@
+openapi: 3.0.3
+info:
+  title: Flow Management Service API
+  description: API para la gestión de flujos de trabajo - CRUD, versionado y validación
+  version: 0.1.0
+  contact:
+    name: Flow Platform Team
+    email: flow-platform@company.com
+
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Development server
+  - url: https://flow-platform.company.com/api/v1
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /flows:
+    get:
+      summary: Obtener lista de flujos
+      description: Recupera una lista paginada de flujos de trabajo
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/FlowStatus'
+        - name: search
+          in: query
+          schema:
+            type: string
+            minLength: 3
+      responses:
+        '200':
+          description: Lista de flujos recuperada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FlowSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Crear nuevo flujo
+      description: Crea un nuevo flujo de trabajo con validación de compatibilidad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFlowRequest'
+            example:
+              name: "Sincronización de Usuarios"
+              description: "Flujo que consulta usuarios de BD y los envía a servicio externo"
+              nodes:
+                - id: "node-1"
+                  type: "sql-query"
+                  version: "1.0.0"
+                  config:
+                    connectionString: "postgresql://user:pass@db:5432/hr"
+                    query: "SELECT * FROM users WHERE updated_at > $1"
+                  position: { x: 100, y: 100 }
+                - id: "node-2" 
+                  type: "data-filter"
+                  version: "1.0.0"
+                  config:
+                    conditions:
+                      - field: "status"
+                        operator: "equals"
+                        value: "active"
+                  position: { x: 300, y: 100 }
+              connections:
+                - fromNodeId: "node-1"
+                  fromOutput: "result"
+                  toNodeId: "node-2"
+                  toInput: "data"
+      responses:
+        '201':
+          description: Flujo creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Conflicto - nombre de flujo ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /flows/{id}:
+    get:
+      summary: Obtener flujo por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Flujo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Actualizar flujo completo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFlowRequest'
+      responses:
+        '200':
+          description: Flujo actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflicto de versión o validación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Eliminar flujo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Flujo eliminado exitosamente
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: No se puede eliminar - tiene schedules activos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /flows/{id}/validate:
+    post:
+      summary: Validar compatibilidad del flujo
+      description: Valida que todas las conexiones entre nodos sean compatibles
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Validación completada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationError'
+                  warnings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationWarning'
+
+  /flows/{id}/versions:
+    get:
+      summary: Obtener historial de versiones
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Historial de versiones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FlowVersion'
+
+  /flows/{id}/versions/{version}/rollback:
+    post:
+      summary: Rollback a versión anterior
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Rollback exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+
+  /health:
+    get:
+      summary: Health check del servicio
+      security: []
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Flow:
+      type: object
+      required: [id, name, nodes, connections, version, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeInstance'
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeConnection'
+        version:
+          type: integer
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/FlowStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          format: uuid
+
+    FlowSummary:
+      type: object
+      required: [id, name, version, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: integer
+        status:
+          $ref: '#/components/schemas/FlowStatus'
+        nodeCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NodeInstance:
+      type: object
+      required: [id, type, version, config, position]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        version:
+          type: string
+          pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+        config:
+          type: object
+          additionalProperties: true
+        position:
+          $ref: '#/components/schemas/Position'
+
+    NodeConnection:
+      type: object
+      required: [fromNodeId, fromOutput, toNodeId, toInput]
+      properties:
+        fromNodeId:
+          type: string
+        fromOutput:
+          type: string
+        toNodeId:
+          type: string
+        toInput:
+          type: string
+
+    Position:
+      type: object
+      required: [x, y]
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+
+    FlowStatus:
+      type: string
+      enum: [draft, active, inactive, archived]
+
+    FlowVersion:
+      type: object
+      properties:
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          format: uuid
+        changes:
+          type: string
+        nodeCount:
+          type: integer
+
+    CreateFlowRequest:
+      type: object
+      required: [name, nodes, connections]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeInstance'
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeConnection'
+        metadata:
+          type: object
+          additionalProperties: true
+
+    UpdateFlowRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateFlowRequest'
+        - type: object
+          properties:
+            status:
+              $ref: '#/components/schemas/FlowStatus'
+
+    ValidationError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        nodeId:
+          type: string
+        field:
+          type: string
+
+    ValidationWarning:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        nodeId:
+          type: string
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        dependencies:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [healthy, unhealthy]
+            redis:
+              type: string
+              enum: [healthy, unhealthy]
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "VALIDATION_ERROR"
+            message: "Los datos proporcionados no son válidos"
+            details:
+              field: "name"
+              reason: "El nombre es requerido"
+
+    Unauthorized:
+      description: No autorizado - token inválido o faltante
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

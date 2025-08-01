@@ -1,0 +1,724 @@
+openapi: 3.0.3
+info:
+  title: Scheduler Service API
+  description: API para la programación y gestión de ejecuciones de flujos de trabajo
+  version: 0.1.0
+  contact:
+    name: Flow Platform Team
+    email: flow-platform@company.com
+
+servers:
+  - url: http://localhost:3002/api/v1
+    description: Development server
+  - url: https://flow-platform.company.com/scheduler/api/v1
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /schedules:
+    get:
+      summary: Obtener lista de schedules
+      description: Recupera una lista paginada de schedules programados
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: flowId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+        - name: nextRunBefore
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista de schedules recuperada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Schedule'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+    post:
+      summary: Crear nuevo schedule
+      description: Programa la ejecución automática de un flujo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduleRequest'
+            example:
+              flowId: "550e8400-e29b-41d4-a716-446655440000"
+              name: "Sincronización Diaria de Usuarios"
+              cronExpression: "0 9 * * 1-5"
+              timezone: "America/Mexico_City"
+              enabled: true
+              maxRetries: 3
+              retryDelay: 300
+              metadata:
+                department: "HR"
+                priority: "high"
+      responses:
+        '201':
+          description: Schedule creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Flujo no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /schedules/{id}:
+    get:
+      summary: Obtener schedule por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Schedule encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Actualizar schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScheduleRequest'
+      responses:
+        '200':
+          description: Schedule actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Eliminar schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Schedule eliminado exitosamente
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /schedules/{id}/enable:
+    post:
+      summary: Activar schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Schedule activado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+
+  /schedules/{id}/disable:
+    post:
+      summary: Desactivar schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Schedule desactivado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+
+  /schedules/bulk/enable:
+    post:
+      summary: Activar múltiples schedules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scheduleIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  minItems: 1
+                  maxItems: 100
+      responses:
+        '200':
+          description: Schedules activados exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkOperationResult'
+
+  /schedules/bulk/disable:
+    post:
+      summary: Desactivar múltiples schedules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scheduleIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  minItems: 1
+                  maxItems: 100
+      responses:
+        '200':
+          description: Schedules desactivados exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkOperationResult'
+
+  /executions:
+    get:
+      summary: Obtener historial de ejecuciones
+      description: Recupera el historial de ejecuciones con filtros
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: flowId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: scheduleId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ExecutionStatus'
+        - name: startTimeFrom
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: startTimeTo
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Historial de ejecuciones recuperado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Execution'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /executions/{id}:
+    get:
+      summary: Obtener detalles de ejecución
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalles de ejecución
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionDetail'
+
+  /executions/{id}/logs:
+    get:
+      summary: Obtener logs de ejecución
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [debug, info, warn, error]
+        - name: nodeId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Logs de ejecución
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExecutionLog'
+
+  /executions/{id}/retry:
+    post:
+      summary: Reintentar ejecución fallida
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Reintento programado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executionId:
+                    type: string
+                    format: uuid
+                  message:
+                    type: string
+
+  /jobs/stats:
+    get:
+      summary: Estadísticas de jobs en cola
+      responses:
+        '200':
+          description: Estadísticas de la cola de jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStats'
+
+  /health:
+    get:
+      summary: Health check del servicio
+      security: []
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Schedule:
+      type: object
+      required: [id, flowId, name, cronExpression, enabled, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        flowId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        cronExpression:
+          type: string
+          pattern: '^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])) (\*|([0-9]|1[0-9]|2[0-3])|\*\/([0-9]|1[0-9]|2[0-3])) (\*|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/([1-9]|1[0-9]|2[0-9]|3[0-1])) (\*|([1-9]|1[0-2])|\*\/([1-9]|1[0-2])) (\*|([0-6])|\*\/([0-6]))$'
+        timezone:
+          type: string
+          default: "UTC"
+        enabled:
+          type: boolean
+          default: true
+        maxRetries:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 3
+        retryDelay:
+          type: integer
+          minimum: 1
+          default: 300
+          description: "Delay in seconds between retries"
+        lastRun:
+          type: string
+          format: date-time
+          nullable: true
+        nextRun:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          format: uuid
+
+    CreateScheduleRequest:
+      type: object
+      required: [flowId, name, cronExpression]
+      properties:
+        flowId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        cronExpression:
+          type: string
+        timezone:
+          type: string
+          default: "UTC"
+        enabled:
+          type: boolean
+          default: true
+        maxRetries:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 3
+        retryDelay:
+          type: integer
+          minimum: 1
+          default: 300
+        metadata:
+          type: object
+          additionalProperties: true
+
+    UpdateScheduleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        cronExpression:
+          type: string
+        timezone:
+          type: string
+        enabled:
+          type: boolean
+        maxRetries:
+          type: integer
+          minimum: 0
+          maximum: 10
+        retryDelay:
+          type: integer
+          minimum: 1
+        metadata:
+          type: object
+          additionalProperties: true
+
+    Execution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        flowId:
+          type: string
+          format: uuid
+        scheduleId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ExecutionStatus'
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        duration:
+          type: integer
+          description: "Duration in milliseconds"
+        recordsProcessed:
+          type: integer
+          minimum: 0
+        errorMessage:
+          type: string
+          nullable: true
+        retryCount:
+          type: integer
+          minimum: 0
+
+    ExecutionDetail:
+      allOf:
+        - $ref: '#/components/schemas/Execution'
+        - type: object
+          properties:
+            nodeExecutions:
+              type: array
+              items:
+                $ref: '#/components/schemas/NodeExecution'
+            metadata:
+              type: object
+              additionalProperties: true
+
+    NodeExecution:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        nodeType:
+          type: string
+        status:
+          $ref: '#/components/schemas/ExecutionStatus'
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        duration:
+          type: integer
+        recordsProcessed:
+          type: integer
+        errorMessage:
+          type: string
+          nullable: true
+
+    ExecutionLog:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        level:
+          type: string
+          enum: [debug, info, warn, error]
+        message:
+          type: string
+        nodeId:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ExecutionStatus:
+      type: string
+      enum: [pending, running, success, failed, cancelled, timeout]
+
+    BulkOperationResult:
+      type: object
+      properties:
+        successCount:
+          type: integer
+        failureCount:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              scheduleId:
+                type: string
+                format: uuid
+              error:
+                type: string
+
+    JobStats:
+      type: object
+      properties:
+        waiting:
+          type: integer
+        active:
+          type: integer
+        completed:
+          type: integer
+        failed:
+          type: integer
+        delayed:
+          type: integer
+        paused:
+          type: integer
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        dependencies:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [healthy, unhealthy]
+            redis:
+              type: string
+              enum: [healthy, unhealthy]
+            flowService:
+              type: string
+              enum: [healthy, unhealthy]
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: No autorizado - token inválido o faltante
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

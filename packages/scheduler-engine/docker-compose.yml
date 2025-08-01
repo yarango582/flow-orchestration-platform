@@ -1,0 +1,172 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: flow-platform-postgres
+    environment:
+      POSTGRES_DB: flow_platform
+      POSTGRES_USER: flow_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - flow-platform
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flow_user -d flow_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for BullMQ
+  redis:
+    image: redis:7-alpine
+    container_name: flow-platform-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - flow-platform
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Flow Platform Scheduler Engine
+  scheduler-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: flow-platform-scheduler
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: flow_user
+      DB_PASSWORD: password
+      DB_DATABASE: flow_platform
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MONGODB_URL: mongodb://mongo_user:password@mongodb:27017/flow_platform?authSource=admin
+      PORT: 3001
+      CORS_ORIGIN: "*"
+      MAX_CONCURRENT_EXECUTIONS: 10
+      NODE_EXECUTION_TIMEOUT: 30000
+      RETRY_ATTEMPTS: 3
+    ports:
+      - "3001:3001"  # Flow Management Service
+      - "3002:3002"  # Scheduler Service
+      - "3003:3003"  # Node Catalog Service
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - flow-platform
+    restart: unless-stopped
+    command: npm run start:dev
+
+  # BullMQ Dashboard (Optional)
+  bull-board:
+    image: deadly0/bull-board
+    container_name: flow-platform-bull-board
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "3010:3000"
+    depends_on:
+      - redis
+    networks:
+      - flow-platform
+    restart: unless-stopped
+
+  # MongoDB Database for node-core testing
+  mongodb:
+    image: mongo:7-jammy
+    container_name: flow-platform-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo_user
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: flow_platform
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./docker/mongodb/init.js:/docker-entrypoint-initdb.d/init.js:ro
+    networks:
+      - flow-platform
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # pgAdmin (Optional - for database management)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: flow-platform-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@flow-platform.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - flow-platform
+    restart: unless-stopped
+
+  # MongoDB Express (Optional - for MongoDB management)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: flow-platform-mongo-express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: mongo_user
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+    networks:
+      - flow-platform
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  flow-platform:
+    driver: bridge

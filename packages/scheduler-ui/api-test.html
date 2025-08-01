@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Testing API Connectivity</h1>
+    <div id="results"></div>
+    
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        async function testAPI() {
+            try {
+                resultsDiv.innerHTML += '<p>Testing API at http://localhost:3001/api/v1/flows...</p>';
+                
+                const response = await fetch('http://localhost:3001/api/v1/flows', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultsDiv.innerHTML += '<p>✅ API Response:</p>';
+                    resultsDiv.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } else {
+                    resultsDiv.innerHTML += '<p>❌ API Error: ' + response.status + ' ' + response.statusText + '</p>';
+                }
+            } catch (error) {
+                resultsDiv.innerHTML += '<p>❌ Network Error: ' + error.message + '</p>';
+            }
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

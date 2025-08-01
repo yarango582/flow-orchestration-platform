@@ -1,0 +1,44 @@
+{
+  "name": "flow-orchestration-platform",
+  "version": "0.1.0",
+  "description": "Private flow orchestration platform with high resilience and scalability",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:node-core\" \"npm run dev:scheduler-engine\" \"npm run dev:scheduler-ui\"",
+    "dev:node-core": "npm run dev --workspace=@flow-platform/node-core",
+    "dev:scheduler-engine": "npm run start:dev --workspace=@flow-platform/scheduler-engine",
+    "dev:scheduler-ui": "npm run dev --workspace=@flow-platform/scheduler-ui",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "eslint packages/**/*.{ts,tsx} --fix",
+    "type-check": "tsc --noEmit --composite false",
+    "clean": "npm run clean --workspaces && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.7",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "author": "Yeison Arango",
+  "license": "MIT"
+}

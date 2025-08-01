@@ -1,0 +1,475 @@
+import React, { useState, useEffect } from 'react'
+import {
+  ClockIcon,
+  PlayIcon,
+  PauseIcon,
+    const handleToggleSchedule = async (schedule: Schedule) => {
+    const result = await withLoading(async () => {
+      try {
+        if (schedule.enabled) {
+          await disableSchedule(schedule.id)
+        } else {
+          await enableSchedule(schedule.id)
+        }
+        const action = schedule.enabled ? 'disabled' : 'enabled'
+        toast.success(`Schedule "${schedule.name}" ${action} successfully`)
+        loadSchedulesData()
+        return true
+      } catch (error: any) {
+        toast.error(`Failed to toggle schedule: ${error.message}`)
+        return false
+      }
+    })
+  }ncilIcon,
+  TrashIcon,
+  EyeIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  CheckIcon,
+} from '@heroicons/react/24/outline'
+import { toast } from 'react-hot-toast'
+import { useSchedulerStore } from '@/stores/scheduler-store'
+import { schedulerService } from '@/services'
+import { Schedule } from '@/types/api'
+import { useLoadingState } from '@/hooks/useLoadingState'
+import LoadingSpinner from '../ui/LoadingSpinner'
+import ScheduleFormModal from '../modals/ScheduleFormModal'
+import BulkOperationsPanel from './BulkOperationsPanel'
+
+const SchedulesList: React.FC = () => {
+  const { isLoading, withLoading } = useLoadingState()
+  const {
+    schedules,
+    loadSchedules,
+    deleteSchedule,
+    enableSchedule,
+    disableSchedule
+  } = useSchedulerStore()
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
+  const [selectedSchedules, setSelectedSchedules] = useState<Schedule[]>([])
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+
+  const PAGE_SIZE = 20
+
+  useEffect(() => {
+    loadSchedulesData()
+  }, [currentPage, searchQuery, statusFilter])
+
+  const loadSchedulesData = async () => {
+    const result = await withLoading(async () => {
+      try {
+        const params = {
+          page: currentPage,
+          limit: PAGE_SIZE,
+          ...(searchQuery && { search: searchQuery }),
+          ...(statusFilter !== 'all' && { enabled: statusFilter === 'enabled' })
+        }
+
+        const response = await schedulerService.getSchedules(params)
+
+        // Update the store with fetched schedules
+        useSchedulerStore.setState({ schedules: response.data })
+
+        setTotalPages(Math.ceil(response.total / PAGE_SIZE))
+        setTotalItems(response.total)
+        return true
+      } catch (error: any) {
+        toast.error(`Failed to load schedules: ${error.message}`)
+        return false
+      }
+    })
+  }
+
+  const handleCreateSchedule = () => {
+    setEditingSchedule(null)
+    setShowCreateModal(true)
+  }
+
+  const handleEditSchedule = (schedule: Schedule) => {
+    setEditingSchedule(schedule)
+    setShowCreateModal(true)
+  }
+
+  const handleDeleteSchedule = async (schedule: Schedule) => {
+    if (!confirm(`Are you sure you want to delete "${schedule.name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    const result = await withLoading(async () => {
+      try {
+        await deleteSchedule(schedule.id)
+        toast.success(`Schedule "${schedule.name}" deleted successfully`)
+        loadSchedulesData()
+        return true
+      } catch (error: any) {
+        toast.error(`Failed to delete schedule: ${error.message}`)
+        return false
+      }
+    })
+  }
+
+  const handleToggleSchedule = async (schedule: Schedule) => {
+    const result = await withLoading(async () => {
+      try {
+        if (schedule.enabled) {
+          await disableSchedule(schedule.id)
+        } else {
+          await enableSchedule(schedule.id)
+        }
+        const action = schedule.enabled ? 'disabled' : 'enabled'
+        toast.success(`Schedule "${schedule.name}" has been ${action}`)
+        loadSchedulesData()
+        return true
+      } catch (error: any) {
+        toast.error(`Failed to toggle schedule: ${error.message}`)
+        return false
+      }
+    })
+  }
+
+  const handleScheduleSaved = () => {
+    setShowCreateModal(false)
+    setEditingSchedule(null)
+    loadSchedulesData()
+  }
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value)
+    setCurrentPage(1)
+  }
+
+  const handleStatusFilterChange = (status: 'all' | 'enabled' | 'disabled') => {
+    setStatusFilter(status)
+    setCurrentPage(1)
+  }
+
+  const handleScheduleSelection = (schedule: Schedule, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedSchedules([...selectedSchedules, schedule])
+    } else {
+      setSelectedSchedules(selectedSchedules.filter(s => s.id !== schedule.id))
+    }
+  }
+
+  const handleSelectAll = (isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedSchedules([...schedules])
+    } else {
+      setSelectedSchedules([])
+    }
+  }
+
+  const formatCronExpression = (cronExpression: string) => {
+    // Simple cron expression formatter - you might want to use a library like cronstrue
+    const parts = cronExpression.split(' ')
+    if (parts.length !== 5) return cronExpression
+
+    const [minute, hour, day, month, dayOfWeek] = parts
+
+    if (minute === '0' && hour !== '*' && day === '*' && month === '*' && dayOfWeek === '*') {
+      return `Daily at ${hour}:00`
+    }
+
+    if (minute === '0' && hour !== '*' && day === '*' && month === '*' && dayOfWeek !== '*') {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      const dayName = days[parseInt(dayOfWeek)] || dayOfWeek
+      return `Weekly on ${dayName} at ${hour}:00`
+    }
+
+    return cronExpression
+  }
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const filteredSchedules = schedules?.length > 0 ? schedules?.filter(schedule => {
+    const matchesSearch = !searchQuery ||
+      schedule.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      schedule.flowName?.toLowerCase().includes(searchQuery.toLowerCase())
+
+    const matchesStatus = statusFilter === 'all' ||
+      (statusFilter === 'enabled' && schedule.enabled) ||
+      (statusFilter === 'disabled' && !schedule.enabled)
+
+    return matchesSearch && matchesStatus
+  }) : []
+
+  const allSelected = filteredSchedules.length > 0 && selectedSchedules.length === filteredSchedules.length
+  const someSelected = selectedSchedules.length > 0 && selectedSchedules.length < filteredSchedules.length
+
+  return (
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Schedules</h1>
+          <p className="text-gray-600 mt-1">
+            Manage automated execution of your flows
+          </p>
+        </div>
+        <button
+          onClick={handleCreateSchedule}
+          className="btn-primary flex items-center space-x-2"
+        >
+          <PlusIcon className="w-5 h-5" />
+          <span>Create Schedule</span>
+        </button>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+        <div className="flex items-center space-x-4">
+          <div className="flex-1 relative">
+            <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search schedules..."
+              value={searchQuery}
+              onChange={handleSearchChange}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <FunnelIcon className="w-5 h-5 text-gray-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => handleStatusFilterChange(e.target.value as 'all' | 'enabled' | 'disabled')}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Status</option>
+              <option value="enabled">Enabled</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Bulk Operations Panel */}
+      <BulkOperationsPanel
+        selectedSchedules={selectedSchedules}
+        onSelectionChange={setSelectedSchedules}
+        onRefresh={loadSchedulesData}
+      />
+
+      {/* Schedules List */}
+      {isLoading ? (
+        <div className="flex justify-center items-center py-12">
+          <LoadingSpinner />
+        </div>
+      ) : filteredSchedules.length === 0 ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+          <div className="text-gray-400 mb-4">
+            <ClockIcon className="w-16 h-16 mx-auto" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No schedules found</h3>
+          <p className="text-gray-600 mb-4">
+            {searchQuery || statusFilter !== 'all'
+              ? 'Try adjusting your search or filter criteria.'
+              : 'Get started by creating your first schedule.'}
+          </p>
+          {!searchQuery && statusFilter === 'all' && (
+            <button onClick={handleCreateSchedule} className="btn-primary">
+              Create Your First Schedule
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={input => {
+                        if (input) input.indeterminate = someSelected
+                      }}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Schedule
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Flow
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cron Expression
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Next Run
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Last Run
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredSchedules.map((schedule) => {
+                  const isSelected = selectedSchedules.some(s => s.id === schedule.id)
+
+                  return (
+                    <tr key={schedule.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => handleScheduleSelection(schedule, e.target.checked)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {schedule.name}
+                          </div>
+                          {schedule.description && (
+                            <div className="text-sm text-gray-500 truncate max-w-xs">
+                              {schedule.description}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {schedule.flowName || 'Unknown Flow'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <ClockIcon className="w-4 h-4 text-gray-400 mr-2" />
+                          <div>
+                            <span className="text-sm text-gray-900 font-mono">
+                              {schedule.cronExpression}
+                            </span>
+                            <div className="text-xs text-gray-500">
+                              {formatCronExpression(schedule.cronExpression)}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${schedule.enabled
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                          }`}>
+                          {schedule.enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatDate(schedule.nextRun)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(schedule.lastRun)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => handleToggleSchedule(schedule)}
+                            className={`${schedule.enabled
+                              ? 'text-yellow-600 hover:text-yellow-900'
+                              : 'text-green-600 hover:text-green-900'
+                              }`}
+                            title={schedule.enabled ? 'Disable Schedule' : 'Enable Schedule'}
+                          >
+                            {schedule.enabled ? (
+                              <PauseIcon className="w-4 h-4" />
+                            ) : (
+                              <PlayIcon className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleEditSchedule(schedule)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Edit Schedule"
+                          >
+                            <PencilIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSchedule(schedule)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete Schedule"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  Showing {(currentPage - 1) * PAGE_SIZE + 1} to{' '}
+                  {Math.min(currentPage * PAGE_SIZE, totalItems)} of{' '}
+                  {totalItems} schedules
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-700">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modals */}
+      <ScheduleFormModal
+        isOpen={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false)
+          setEditingSchedule(null)
+        }}
+        onSave={handleScheduleSaved}
+        schedule={editingSchedule}
+      />
+    </div>
+  )
+}
+
+export default SchedulesList
