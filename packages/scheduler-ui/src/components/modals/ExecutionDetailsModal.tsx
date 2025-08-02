@@ -16,7 +16,7 @@ import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
 // These are assumed to be your internal service and type definitions
 import { schedulerService, realtimeService } from '@/services';
-import { ExecutionDetail, ExecutionLog, ExecutionStatus } from '@/types/api';
+import { Execution, ExecutionLog, ExecutionStatus } from '@/types/api';
 
 // Props interface for the component
 interface ExecutionDetailsModalProps {
@@ -35,9 +35,10 @@ const ExecutionDetailsModal: React.FC<ExecutionDetailsModalProps> = ({
   executionId
 }) => {
   // State management
-  const [execution, setExecution] = useState<ExecutionDetail | null>(null);
+  const [execution, setExecution] = useState<Execution | null>(null);
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'nodes' | 'logs'>('overview');
   const [logLevel, setLogLevel] = useState<'debug' | 'info' | 'warn' | 'error' | 'all'>('all');
   const [isRetrying, setIsRetrying] = useState(false);
@@ -48,6 +49,7 @@ const ExecutionDetailsModal: React.FC<ExecutionDetailsModalProps> = ({
    */
   useEffect(() => {
     if (isOpen && executionId) {
+      setError(null); // Reset error state when opening
       loadExecutionDetails();
       loadExecutionLogs();
       
@@ -75,12 +77,18 @@ const ExecutionDetailsModal: React.FC<ExecutionDetailsModalProps> = ({
    */
   const loadExecutionDetails = async () => {
     setIsLoading(true);
+    setError(null);
     try {
+      console.log('=== ExecutionDetailsModal: Loading execution details for ID:', executionId);
       const executionDetails = await schedulerService.getExecution(executionId);
+      console.log('=== ExecutionDetailsModal: Execution details loaded:', executionDetails);
+      console.log('=== ExecutionDetailsModal: Execution status:', executionDetails?.status);
+      console.log('=== ExecutionDetailsModal: Error message:', executionDetails?.errorMessage);
+      console.log('=== ExecutionDetailsModal: Full execution object:', JSON.stringify(executionDetails, null, 2));
       setExecution(executionDetails);
     } catch (error: any) {
-      toast.error('Failed to load execution details: ' + error.message);
-      onClose(); // Close modal if details can't be loaded
+      console.error('=== ExecutionDetailsModal: Error loading execution details:', error);
+      setError(`Failed to load execution details: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -195,6 +203,17 @@ const ExecutionDetailsModal: React.FC<ExecutionDetailsModalProps> = ({
     return `${minutes}m ${seconds}s`;
   };
 
+  // Debug logging para ver el estado del modal
+  console.log('=== ExecutionDetailsModal: Render state ===');
+  console.log('isOpen:', isOpen);
+  console.log('executionId:', executionId);
+  console.log('isLoading:', isLoading);
+  console.log('error:', error);
+  console.log('execution:', execution);
+  console.log('execution?.errorMessage:', execution?.errorMessage);
+  console.log('execution?.status:', execution?.status);
+  console.log('=====================================');
+
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
@@ -228,6 +247,20 @@ const ExecutionDetailsModal: React.FC<ExecutionDetailsModalProps> = ({
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 <span className="ml-3 text-gray-600">Loading execution details...</span>
               </div>
+            ) : error ? (
+              <div className="p-6 h-[600px] flex flex-col items-center justify-center space-y-4">
+                <XCircleIcon className="w-12 h-12 text-red-500" />
+                <div className="text-center">
+                  <h3 className="text-lg font-medium text-red-700 mb-2">Error Loading Execution</h3>
+                  <p className="text-gray-600 mb-4">{error}</p>
+                  <button 
+                    onClick={loadExecutionDetails}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
             ) : execution ? (
               <div className="flex flex-col h-[600px]">
                 <div className="flex border-b border-gray-200">
@@ -257,7 +290,10 @@ const ExecutionDetailsModal: React.FC<ExecutionDetailsModalProps> = ({
 
                   {/* Node Executions Tab */}
                   {activeTab === 'nodes' && (
-                    <div className="space-y-4"><h3 className="text-lg font-medium text-gray-900">Node Executions</h3>{execution.nodeExecutions.length === 0 ? <p className="text-gray-500">No node executions found.</p> : <div className="space-y-3">{execution.nodeExecutions.map((node, index) => (<div key={index} className="border bg-white border-gray-200 rounded-lg p-4"><div className="flex items-start justify-between"><div className="flex-1"><div className="flex items-center space-x-2">{getStatusIcon(node.status)}<h4 className="font-medium text-gray-900">{node.nodeType}</h4><span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(node.status)}`}>{node.status}</span></div><p className="text-sm text-gray-500 mt-1 font-mono">Node ID: {node.nodeId}</p><div className="mt-2 grid grid-cols-3 gap-4 text-sm"><div><span className="text-gray-500">Duration:</span><span className="ml-1 font-medium">{formatDuration(node.startTime, node.endTime)}</span></div><div><span className="text-gray-500">Records:</span><span className="ml-1 font-medium">{node.recordsProcessed}</span></div><div><span className="text-gray-500">Started:</span><span className="ml-1 font-medium">{format(new Date(node.startTime), 'HH:mm:ss.SSS')}</span></div></div>{node.errorMessage && <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded"><p className="text-xs text-red-700 font-mono">{node.errorMessage}</p></div>}</div></div></div>))}</div>}</div>
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium text-gray-900">Node Executions</h3>
+                      <p className="text-gray-500">Node execution details are not available yet. This feature will be implemented when the backend provides node-level execution data.</p>
+                    </div>
                   )}
 
                   {/* Logs Tab */}

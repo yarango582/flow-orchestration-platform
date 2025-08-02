@@ -16,6 +16,7 @@ import { schedulerService } from '@/services'
 import { Schedule } from '@/types/api'
 import { useLoadingState } from '@/hooks/useLoadingState'
 import LoadingSpinner from '../ui/LoadingSpinner'
+import ScheduleFormModal from '../modals/ScheduleFormModal'
 
 const SchedulesList: React.FC = () => {
   const { isLoading, withLoading } = useLoadingState()
@@ -26,6 +27,7 @@ const SchedulesList: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   const PAGE_SIZE = 20
 
@@ -104,6 +106,12 @@ const SchedulesList: React.FC = () => {
     setCurrentPage(1)
   }
 
+  const handleCreateSchedule = (newSchedule: Schedule) => {
+    setSchedules(prev => [newSchedule, ...prev])
+    setShowCreateModal(false)
+    toast.success('Schedule created successfully!')
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -144,6 +152,7 @@ const SchedulesList: React.FC = () => {
         </div>
         <button
           className="btn-primary flex items-center space-x-2"
+          onClick={() => setShowCreateModal(true)}
         >
           <PlusIcon className="w-5 h-5" />
           <span>Create Schedule</span>
@@ -326,6 +335,13 @@ const SchedulesList: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Create Schedule Modal */}
+      <ScheduleFormModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSave={handleCreateSchedule}
+      />
     </div>
   )
 }

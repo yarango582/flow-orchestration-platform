@@ -60,8 +60,8 @@ export interface NodeConnection {
 }
 
 export interface Position {
-  x: number
-  y: number
+  x: string
+  y: string
 }
 
 export type FlowStatus = 'draft' | 'active' | 'inactive' | 'archived'

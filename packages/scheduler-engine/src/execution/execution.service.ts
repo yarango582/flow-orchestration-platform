@@ -13,9 +13,14 @@ import { ExecutionStatus, ExecutionLog, NodeExecution } from '../database/entiti
 
 // Import from node-core library
 import { 
-  NodeRegistry, 
   INode, 
+  NodeRegistry, 
+  ExecutionContext as NodeExecutionContext,
   NodeResult,
+  PostgreSQLQueryNode,
+  DataFilterNode,
+  FieldMapperNode,
+  MongoDBOperationsNode
 } from '@flow-platform/node-core';
 
 // Import ExecutionContext from local
@@ -40,6 +45,19 @@ export class ExecutionService {
     @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
   ) {
     this.nodeRegistry = new NodeRegistry();
+    this.initializeNodeRegistry();
+  }
+
+  private initializeNodeRegistry(): void {
+    // Register all available node types from node-core
+    this.nodeRegistry.register(PostgreSQLQueryNode, 'postgresql-query');
+    this.nodeRegistry.register(DataFilterNode, 'data-filter');
+    this.nodeRegistry.register(FieldMapperNode, 'field-mapper');
+    this.nodeRegistry.register(MongoDBOperationsNode, 'mongodb-operations');
+    
+    this.logger.info('Execution service node registry initialized', {
+      availableTypes: this.nodeRegistry.getAvailableTypes()
+    });
   }
 
   async executeFlow(executionId: string, flow: FlowDto): Promise<FlowExecutionResult> {
@@ -196,7 +214,7 @@ export class ExecutionService {
       executionId,
       flowId: flow.id,
       // flowName: flow.name,
-      userId: flow.createdBy,
+      // userId: flow.createdBy,
       timestamp: new Date(),
       logger: this.logger,
       metadata: flow.metadata || {},

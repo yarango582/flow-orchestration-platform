@@ -4,6 +4,7 @@ export { flowService } from './flow-service'
 export { schedulerService } from './scheduler-service'
 export { catalogService } from './catalog-service'
 export { realtimeService } from './realtime-service'
+export { nodeRegistryService } from './node-registry.service'
 
 // Service classes for direct instantiation if needed
 export { FlowService } from './flow-service'

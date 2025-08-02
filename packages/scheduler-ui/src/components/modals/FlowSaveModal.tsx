@@ -21,7 +21,6 @@ const flowSaveSchema = z.object({
     .string()
     .max(500, 'Description must be less than 500 characters')
     .optional(),
-  status: z.enum(['draft', 'active', 'inactive', 'archived']).default('draft'),
 })
 
 // Type derived from the Zod schema
@@ -70,7 +69,6 @@ const FlowSaveModal: React.FC<FlowSaveModalProps> = ({
     defaultValues: {
       name: existingFlow?.name || '',
       description: existingFlow?.description || '',
-      status: existingFlow?.status || 'draft',
     },
   })
 
@@ -119,23 +117,48 @@ const FlowSaveModal: React.FC<FlowSaveModalProps> = ({
 
     setIsLoading(true)
     try {
+      // Transform nodes to match backend expectations
+      const transformedNodes = flowData.nodes.map(node => ({
+        id: node.id,
+        type: node.data?.type || node.type,
+        version: "1.0.0", // Default version
+        position: {
+          x: String(node.position?.x || 0),
+          y: String(node.position?.y || 0)
+        },
+        config: node.data?.config || {}
+      }))
+
+      // Transform connections to match backend expectations  
+      const transformedConnections = flowData.connections.map(conn => {
+        console.log('Connection data:', conn) // Debug log
+        return {
+          fromNodeId: String(conn.fromNodeId),
+          fromOutput: String(conn.fromOutput || 'output'),
+          toNodeId: String(conn.toNodeId),
+          toInput: String(conn.toInput || 'input')
+        }
+      })
+
       let savedFlow
       if (existingFlow) {
-        // Prepare and send update request
+        // Prepare and send update request (without status)
         const updateRequest: UpdateFlowRequest = {
-          ...data,
-          nodes: flowData.nodes,
-          connections: flowData.connections,
+          name: data.name,
+          description: data.description,
+          nodes: transformedNodes,
+          connections: transformedConnections,
           metadata: flowData.metadata,
         }
         savedFlow = await flowService.updateFlow(existingFlow.id, updateRequest)
         toast.success('Flow updated successfully!')
       } else {
-        // Prepare and send create request
+        // Prepare and send create request (without status)
         const createRequest: CreateFlowRequest = {
-          ...data,
-          nodes: flowData.nodes,
-          connections: flowData.connections,
+          name: data.name,
+          description: data.description,
+          nodes: transformedNodes,
+          connections: transformedConnections,
           metadata: flowData.metadata,
         }
         savedFlow = await flowService.createFlow(createRequest)
@@ -158,7 +181,6 @@ const FlowSaveModal: React.FC<FlowSaveModalProps> = ({
     reset({
       name: existingFlow?.name || '',
       description: existingFlow?.description || '',
-      status: existingFlow?.status || 'draft',
     })
     setValidationResults(null)
     onClose()
@@ -231,26 +253,6 @@ const FlowSaveModal: React.FC<FlowSaveModalProps> = ({
                     {errors.description.message}
                   </p>
                 )}
-              </div>
-
-              {/* Status Selector */}
-              <div>
-                <label
-                  htmlFor="status"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Status
-                </label>
-                <select
-                  {...register('status')}
-                  id="status"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="archived">Archived</option>
-                </select>
               </div>
 
               {/* Flow Statistics */}

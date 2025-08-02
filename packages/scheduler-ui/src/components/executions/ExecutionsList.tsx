@@ -60,8 +60,8 @@ const ExecutionsList: React.FC = () => {
 
         const response = await schedulerService.getExecutions(params)
         setExecutions(response.data)
-        setTotalPages(Math.ceil(response.total / PAGE_SIZE))
-        setTotalItems(response.total)
+        setTotalPages(Math.ceil((response.pagination?.total || 0) / PAGE_SIZE))
+        setTotalItems(response.pagination?.total || 0)
         return true
       } catch (error: any) {
         toast.error(`Failed to load executions: ${error.message}`)
@@ -104,7 +104,7 @@ const ExecutionsList: React.FC = () => {
       return
     }
 
-    if (!confirm(`Are you sure you want to cancel the execution for "${execution.flowName}"?`)) {
+    if (!confirm(`Are you sure you want to cancel the execution for "${execution.flowId}"?`)) {
       return
     }
 
@@ -154,7 +154,8 @@ const ExecutionsList: React.FC = () => {
       failed: 'bg-red-100 text-red-800',
       running: 'bg-blue-100 text-blue-800',
       cancelled: 'bg-gray-100 text-gray-800',
-      pending: 'bg-yellow-100 text-yellow-800'
+      pending: 'bg-yellow-100 text-yellow-800',
+      timeout: 'bg-orange-100 text-orange-800'
     }
     return badges[status] || badges.pending
   }
@@ -200,8 +201,8 @@ const ExecutionsList: React.FC = () => {
 
   const filteredExecutions = executions?.length > 0 ? executions.filter(execution => {
     const matchesSearch = !searchQuery ||
-      execution.flowName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      execution.scheduleName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      execution.flowId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      execution.scheduleId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       execution.id.toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesStatus = statusFilter === 'all' || execution.status === statusFilter
@@ -316,16 +317,16 @@ const ExecutionsList: React.FC = () => {
                           <div className="text-sm font-medium text-gray-900">
                             {execution.id}
                           </div>
-                          {execution.scheduleName && (
+                          {execution.scheduleId && (
                             <div className="text-sm text-gray-500">
-                              Schedule: {execution.scheduleName}
+                              Schedule: {execution.scheduleId}
                             </div>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {execution.flowName || 'Unknown Flow'}
+                          {execution.flowId || 'Unknown Flow'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -424,7 +425,7 @@ const ExecutionsList: React.FC = () => {
           setShowDetailsModal(false)
           setSelectedExecution(null)
         }}
-        execution={selectedExecution}
+        executionId={selectedExecution?.id || ''}
       />
     </div>
   )

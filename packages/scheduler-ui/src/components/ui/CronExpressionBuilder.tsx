@@ -10,6 +10,7 @@ interface CronExpressionBuilderProps {
   onClose: () => void;
   initialValue?: string;
   onSave: (cronExpression: string) => void;
+  onPresetSelect?: (cronExpression: string) => void;
 }
 
 // Defines the types of schedules available
@@ -33,7 +34,8 @@ const CronExpressionBuilder: React.FC<CronExpressionBuilderProps> = ({
   isOpen,
   onClose,
   initialValue = '0 9 * * 1-5', // Default to weekdays at 9 AM
-  onSave
+  onSave,
+  onPresetSelect
 }) => {
   // State for the main configuration object
   const [config, setConfig] = useState<CronConfig>({
@@ -208,7 +210,11 @@ const CronExpressionBuilder: React.FC<CronExpressionBuilderProps> = ({
                     <button
                       key={type}
                       type="button"
-                      onClick={() => setConfig(prev => ({ ...prev, type }))}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setConfig(prev => ({ ...prev, type }));
+                      }}
                       className={`px-3 py-2 text-sm rounded-md border transition-colors ${
                         config.type === type
                           ? 'bg-blue-50 border-blue-500 text-blue-700'
@@ -315,10 +321,18 @@ const CronExpressionBuilder: React.FC<CronExpressionBuilderProps> = ({
                     <button
                       key={index}
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         const parsed = parseCronExpression(preset.value);
                         setConfig(parsed);
                         setCustomExpression(preset.value);
+                        // Only update the expression, don't close the modal
+                        if (onPresetSelect) {
+                          onPresetSelect(preset.value);
+                        } else {
+                          onSave(preset.value);
+                        }
                       }}
                       className="text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors"
                     >

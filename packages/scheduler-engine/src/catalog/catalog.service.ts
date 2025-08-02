@@ -20,7 +20,15 @@ import {
 import { NodeDefinition, NodeCategory } from '../database/entities/node-definition.entity';
 
 // Import from node-core library
-import { NodeRegistry, INode, CompatibilityValidator } from '@flow-platform/node-core';
+import { 
+  NodeRegistry, 
+  INode, 
+  CompatibilityValidator,
+  PostgreSQLQueryNode,
+  DataFilterNode,
+  FieldMapperNode,
+  MongoDBOperationsNode
+} from '@flow-platform/node-core';
 
 @Injectable()
 export class CatalogService implements OnModuleInit {
@@ -33,6 +41,19 @@ export class CatalogService implements OnModuleInit {
   ) {
     this.nodeRegistry = new NodeRegistry();
     this.compatibilityValidator = new CompatibilityValidator();
+    this.initializeNodeRegistry();
+  }
+
+  private initializeNodeRegistry(): void {
+    // Register all available node types from node-core
+    this.nodeRegistry.register(PostgreSQLQueryNode, 'postgresql-query');
+    this.nodeRegistry.register(DataFilterNode, 'data-filter');
+    this.nodeRegistry.register(FieldMapperNode, 'field-mapper');
+    this.nodeRegistry.register(MongoDBOperationsNode, 'mongodb-operations');
+    
+    this.logger.info('Node registry initialized with available node types', {
+      availableTypes: this.nodeRegistry.getAvailableTypes()
+    });
   }
 
   async onModuleInit() {
