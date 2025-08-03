@@ -117,17 +117,29 @@ const FlowSaveModal: React.FC<FlowSaveModalProps> = ({
 
     setIsLoading(true)
     try {
+      console.log('FlowSaveModal: Original flowData.nodes:', flowData.nodes)
+      
       // Transform nodes to match backend expectations
-      const transformedNodes = flowData.nodes.map(node => ({
-        id: node.id,
-        type: node.data?.type || node.type,
-        version: "1.0.0", // Default version
-        position: {
-          x: String(node.position?.x || 0),
-          y: String(node.position?.y || 0)
-        },
-        config: node.data?.config || {}
-      }))
+      const transformedNodes = flowData.nodes.map(node => {
+        console.log('FlowSaveModal: Processing node:', node)
+        console.log('FlowSaveModal: Node has config directly:', node.config)
+        console.log('FlowSaveModal: Node has data.config:', node.data?.config)
+        const transformed = {
+          id: node.id,
+          type: node.data?.type || node.type,
+          version: "1.0.0", // Default version
+          position: {
+            x: String(node.position?.x || 0),
+            y: String(node.position?.y || 0)
+          },
+          config: node.config || node.data?.config || {}
+        }
+        console.log('FlowSaveModal: Transformed node:', transformed)
+        console.log('FlowSaveModal: Final config being sent:', transformed.config)
+        return transformed
+      })
+      
+      console.log('FlowSaveModal: Final transformedNodes:', transformedNodes)
 
       // Transform connections to match backend expectations  
       const transformedConnections = flowData.connections.map(conn => {

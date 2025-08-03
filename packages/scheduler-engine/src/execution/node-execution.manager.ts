@@ -72,7 +72,8 @@ export class NodeExecutionManager {
     private readonly eventEmitter: EventEmitter2,
     @Inject(WINSTON_MODULE_PROVIDER) private readonly winstonLogger: WinstonLogger,
   ) {
-    this.nodeRegistry = new NodeRegistry();
+    // Use the same NodeRegistry instance from CatalogService
+    this.nodeRegistry = this.catalogService.getNodeRegistry();
   }
 
   async executeNode(
@@ -118,6 +119,17 @@ export class NodeExecutionManager {
       inputs.forEach((value, key) => {
         inputData[key] = value;
       });
+
+      // For nodes with no input connections (source nodes), 
+      // merge config values into inputData
+      if (inputs.size === 0 && config) {
+        Object.assign(inputData, config);
+        this.logger.debug(`Merged config into inputData for source node ${nodeType}`, {
+          nodeId,
+          configKeys: Object.keys(config),
+          inputData
+        });
+      }
 
       // Execute with retry logic
       const result = await this.executeWithRetry(
@@ -425,6 +437,16 @@ export class NodeExecutionManager {
     inputs.forEach((value, key) => {
       inputData[key] = value;
     });
+
+    // For nodes with no input connections (source nodes), 
+    // merge config values into inputData for validation
+    if (inputs.size === 0 && config) {
+      Object.assign(inputData, config);
+      this.logger.debug(`Merged config into inputData for validation of source node ${nodeType}`, {
+        configKeys: Object.keys(config),
+        inputData
+      });
+    }
 
     const validation = await this.validateNodeInput(nodeType, inputData, config);
     

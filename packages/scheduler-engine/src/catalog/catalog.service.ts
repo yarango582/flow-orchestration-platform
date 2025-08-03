@@ -56,9 +56,55 @@ export class CatalogService implements OnModuleInit {
     });
   }
 
+  // Getter to expose nodeRegistry for dependency injection
+  getNodeRegistry(): NodeRegistry {
+    return this.nodeRegistry;
+  }
+
   async onModuleInit() {
     // Initialize node registry and load available nodes from node-core
     await this.syncNodesFromRegistry();
+    
+    // Force resync for existing nodes with incorrect metadata
+    await this.forceResyncNodes();
+  }
+
+  private async forceResyncNodes(): Promise<void> {
+    this.logger.info('Force resyncing nodes with updated metadata');
+    
+    try {
+      // Delete and recreate postgresql-query node
+      const existingPgNode = await this.catalogRepository.findByType('postgresql-query');
+      if (existingPgNode) {
+        // Delete existing node
+        await this.catalogRepository.delete(existingPgNode.id);
+        this.logger.info('Deleted existing postgresql-query node for resync');
+      }
+      
+      // Recreate with correct metadata
+      const pgNodeClass = this.nodeRegistry.getAllNodes().get('postgresql-query');
+      if (pgNodeClass) {
+        const nodeInstance = new pgNodeClass();
+        const metadata = this.extractNodeMetadata(nodeInstance);
+        
+        await this.catalogRepository.create({
+          type: metadata.type,
+          name: metadata.name,
+          description: metadata.description,
+          version: metadata.version,
+          category: metadata.category,
+          inputs: metadata.inputs,
+          outputs: metadata.outputs,
+          compatibilityMatrix: metadata.compatibilityMatrix,
+          configuration: metadata.configuration,
+          metadata: metadata.additionalMetadata,
+        });
+        
+        this.logger.info('Force resynced postgresql-query node with correct metadata');
+      }
+    } catch (error) {
+      this.logger.error('Failed to force resync nodes', error);
+    }
   }
 
   async getNodes(options: {
@@ -383,8 +429,92 @@ export class CatalogService implements OnModuleInit {
   }
 
   private extractNodeMetadata(nodeInstance: INode): any {
-    // Extract metadata from node instance
-    // This would depend on the actual implementation of the node-core library
+    // Try to get metadata from static getMetadata method first
+    const NodeClass = nodeInstance.constructor as any
+    
+    if (typeof NodeClass.getMetadata === 'function') {
+      try {
+        const metadata = NodeClass.getMetadata()
+        return {
+          type: metadata.type,
+          name: metadata.name,
+          description: metadata.description,
+          version: metadata.version,
+          category: metadata.category,
+          inputs: metadata.inputs.map(input => ({
+            name: input.name,
+            type: input.type,
+            required: input.required,
+            description: input.description,
+            defaultValue: input.defaultValue,
+            validation: input.validation
+          })),
+          outputs: metadata.outputs.map(output => ({
+            name: output.name,
+            type: output.type,
+            description: output.description,
+            schema: output.schema
+          })),
+          compatibilityMatrix: metadata.compatibilityMatrix || [],
+          configuration: metadata.configuration || {},
+          additionalMetadata: {
+            tags: metadata.tags,
+            relatedNodes: metadata.relatedNodes,
+            icon: metadata.icon
+          }
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to get metadata from static method for ${nodeInstance.type}:`, error)
+      }
+    }
+    
+    // Fallback to hardcoded metadata for backward compatibility
+    if (nodeInstance.type === 'postgresql-query') {
+      return {
+        type: 'postgresql-query',
+        name: 'PostgreSQL Query',
+        description: 'Execute SQL queries against PostgreSQL database',
+        version: '1.0.0',
+        category: NodeCategory.DATABASE,
+        inputs: [
+          {
+            name: 'connectionString',
+            type: 'string',
+            required: true,
+            description: 'PostgreSQL connection string'
+          },
+          {
+            name: 'query',
+            type: 'string', 
+            required: true,
+            description: 'SQL query to execute'
+          },
+          {
+            name: 'parameters',
+            type: 'array',
+            required: false,
+            description: 'Query parameters'
+          }
+        ],
+        outputs: [
+          {
+            name: 'result',
+            type: 'array',
+            description: 'Query results'
+          },
+          {
+            name: 'rowCount',
+            type: 'number',
+            description: 'Number of rows affected'
+          }
+        ],
+        compatibilityMatrix: [],
+        configuration: {},
+        additionalMetadata: {},
+      };
+    }
+    
+    // For other nodes, return default metadata
     return {
       type: nodeInstance.constructor.name.toLowerCase().replace(/node$/, ''),
       name: nodeInstance.constructor.name,

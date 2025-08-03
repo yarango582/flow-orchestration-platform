@@ -20,6 +20,8 @@ import {
   ScheduleDto,
   PaginatedSchedulesDto,
   ExecutionDto,
+  ExecutionDetailDto,
+  NodeExecutionDto,
   PaginatedExecutionsDto,
   BulkOperationResultDto,
   JobStatsDto,
@@ -208,13 +210,13 @@ export class SchedulerService {
     };
   }
 
-  async getExecutionById(id: string): Promise<ExecutionDto> {
+  async getExecutionById(id: string): Promise<ExecutionDetailDto> {
     const execution = await this.executionRepository.findById(id);
     if (!execution) {
       throw new NotFoundException(`Execution with ID '${id}' not found`);
     }
 
-    return this.mapExecutionToDto(execution);
+    return this.mapExecutionToDetailDto(execution);
   }
 
   async retryExecution(id: string): Promise<{ executionId: string; message: string }> {
@@ -439,6 +441,25 @@ export class SchedulerService {
       recordsProcessed: execution.recordsProcessed,
       errorMessage: execution.errorMessage,
       retryCount: execution.retryCount,
+    };
+  }
+
+  private mapExecutionToDetailDto(execution: Execution): ExecutionDetailDto {
+    const baseDto = this.mapExecutionToDto(execution);
+    
+    return {
+      ...baseDto,
+      nodeExecutions: execution.nodeExecutions?.map(node => ({
+        nodeId: node.nodeId,
+        nodeType: node.nodeType,
+        status: node.status,
+        startTime: node.startTime,
+        endTime: node.endTime,
+        duration: node.duration,
+        recordsProcessed: node.recordsProcessed,
+        errorMessage: node.errorMessage,
+      })) || [],
+      metadata: execution.metadata,
     };
   }
 }

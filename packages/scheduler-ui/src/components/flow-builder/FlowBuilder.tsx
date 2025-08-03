@@ -3,10 +3,10 @@ import { useParams } from 'react-router-dom'
 import ReactFlow, {
   Node,
   Edge,
-  addEdge,
   Connection,
   useNodesState,
   useEdgesState,
+  addEdge,
   Controls,
   MiniMap,
   Background,
@@ -43,17 +43,24 @@ const FlowBuilder: React.FC = () => {
   const [isDirty, setIsDirty] = useState(false)
 
   // Convert NodeInstance to ReactFlow Node
-  const nodeInstanceToNode = (nodeInstance: any): Node => ({
-    id: nodeInstance.id,
-    type: 'custom',
-    position: nodeInstance.position,
-    data: {
-      type: nodeInstance.type,
-      name: nodeInstance.name || nodeInstance.type,
-      category: nodeInstance.category || 'default',
-      config: nodeInstance.config || {}
+  const nodeInstanceToNode = (nodeInstance: any): Node => {
+    console.log('Converting NodeInstance to ReactFlow Node:', nodeInstance)
+    console.log('NodeInstance config:', nodeInstance.config)
+    const result = {
+      id: nodeInstance.id,
+      type: 'custom',
+      position: nodeInstance.position,
+      data: {
+        type: nodeInstance.type,
+        name: nodeInstance.name || nodeInstance.type,
+        category: nodeInstance.category || 'default',
+        config: nodeInstance.config || {}
+      }
     }
-  })
+    console.log('Converted Node:', result)
+    console.log('Converted Node data.config:', result.data.config)
+    return result
+  }
 
   // Convert NodeConnection to ReactFlow Edge
   const nodeConnectionToEdge = (connection: any): Edge => ({
@@ -67,13 +74,22 @@ const FlowBuilder: React.FC = () => {
   })
 
   // Convert ReactFlow Node to NodeInstance
-  const nodeToNodeInstance = (node: Node): any => ({
-    id: node.id,
-    type: node.data?.type || 'unknown',
-    version: '1.0.0',
-    position: node.position,
-    config: node.data?.config || {}
-  })
+  const nodeToNodeInstance = (node: Node): any => {
+    console.log('Converting ReactFlow Node to NodeInstance:', node)
+    console.log('Node data config:', node.data?.config)
+    const result = {
+      id: node.id,
+      type: node.data?.type || 'unknown',
+      name: node.data?.name,
+      category: node.data?.category,
+      version: '1.0.0',
+      position: node.position,
+      config: node.data?.config || {}
+    }
+    console.log('Converted NodeInstance:', result)
+    console.log('Converted config:', result.config)
+    return result
+  }
 
   // Convert ReactFlow Edge to NodeConnection
   const edgeToNodeConnection = (edge: Edge): any => ({
@@ -109,11 +125,13 @@ const FlowBuilder: React.FC = () => {
     setIsLoading(true)
     try {
       const flow = await flowService.getFlow(id)
+      console.log('Loaded flow from API:', flow)
       setCurrentFlow(flow)
       
       const reactFlowNodes = (flow.nodes || []).map(nodeInstanceToNode)
       const reactFlowEdges = (flow.connections || []).map(nodeConnectionToEdge)
       
+      console.log('Converted to ReactFlow nodes:', reactFlowNodes)
       setNodes(reactFlowNodes)
       setEdges(reactFlowEdges)
       setIsDirty(false)
@@ -153,25 +171,41 @@ const FlowBuilder: React.FC = () => {
         config: {}
       },
     }
+    console.log('Adding new node:', newNode)
     setNodes((nds) => [...nds, newNode])
   }, [nodes.length, setNodes])
 
   const updateNodeConfig = useCallback((nodeId: string, config: any) => {
+    console.log('FlowBuilder: Updating node config', { nodeId, config })
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
+          const updatedNode = {
             ...node,
             data: {
               ...node.data,
-              config: { ...node.data.config, ...config }
+              config: { ...(node.data.config || {}), ...config }
             }
           }
+          console.log('FlowBuilder: Updated node', updatedNode)
+          console.log('FlowBuilder: New config is', updatedNode.data.config)
+          return updatedNode
         }
         return node
       })
     )
   }, [setNodes])
+
+  // Sync selectedNode with updated nodes state
+  useEffect(() => {
+    if (selectedNode) {
+      const updatedSelectedNode = nodes.find(node => node.id === selectedNode.id)
+      if (updatedSelectedNode && updatedSelectedNode !== selectedNode) {
+        console.log('FlowBuilder: Syncing selectedNode with updated node data')
+        setSelectedNode(updatedSelectedNode)
+      }
+    }
+  }, [nodes, selectedNode])
 
   if (isLoading) {
     return (
@@ -228,6 +262,8 @@ const FlowBuilder: React.FC = () => {
             nodeTypes={nodeTypes}
             fitView
             className="bg-gray-50"
+            deleteKeyCode={null} // Disable delete key to prevent interference
+            multiSelectionKeyCode={null} // Disable multi-selection key to prevent interference
           >
             <Controls />
             <MiniMap />

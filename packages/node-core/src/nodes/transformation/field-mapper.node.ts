@@ -1,11 +1,14 @@
-import { BaseNode } from '../../base/base-node'
+import { BaseNode, NodeMetadata } from '../../base/base-node'
 import { NodeResult } from '../../interfaces/node.interface'
 
 interface FieldMapping {
   sourceField: string
   targetField: string
-  transformation: 'rename' | 'cast' | 'function' | 'default'
-  transformValue?: any
+  transformation: 'rename' | 'function' | 'constant'
+  parameters?: {
+    functionBody?: string
+    constantValue?: any
+  }
 }
 
 interface FieldMapperInput {
@@ -21,6 +24,71 @@ export class FieldMapperNode extends BaseNode<FieldMapperInput, FieldMapperOutpu
   readonly type = 'field-mapper'
   readonly version = '1.0.0'
   readonly category = 'transformation'
+  
+  static getMetadata(): NodeMetadata {
+    return {
+      type: 'field-mapper',
+      name: 'Field Mapper',
+      description: 'Maps and transforms fields from input to output format with custom transformations and functions',
+      version: '1.0.0',
+      category: 'transformation',
+      icon: 'transform',
+      inputs: [
+        {
+          name: 'source',
+          type: 'array',
+          required: true,
+          description: 'Source data to map (array of objects or single object)'
+        },
+        {
+          name: 'mapping',
+          type: 'array',
+          required: true,
+          description: 'Array of field mapping configurations',
+          defaultValue: [
+            {
+              sourceField: 'id',
+              targetField: 'identifier',
+              transformation: 'rename'
+            }
+          ]
+        }
+      ],
+      outputs: [
+        {
+          name: 'mapped',
+          type: 'array',
+          description: 'Mapped data with transformed fields',
+          schema: {
+            type: 'array',
+            items: { type: 'object' }
+          }
+        }
+      ],
+      compatibilityMatrix: [
+        {
+          targetType: 'data-filter',
+          outputPin: 'mapped',
+          targetInputPin: 'data',
+          compatibility: 'full'
+        },
+        {
+          targetType: 'mongodb-operations',
+          outputPin: 'mapped',
+          targetInputPin: 'data',
+          compatibility: 'full'
+        }
+      ],
+      configuration: {
+        timeout: 15000,
+        retries: 2,
+        concurrency: 1,
+        batchSize: 2000
+      },
+      tags: ['transformation', 'mapping', 'field-transformation'],
+      relatedNodes: ['data-filter', 'postgresql-query', 'mongodb-operations']
+    }
+  }
   
   async execute(input: FieldMapperInput): Promise<NodeResult<FieldMapperOutput>> {
     const startTime = Date.now()
@@ -39,14 +107,20 @@ export class FieldMapperNode extends BaseNode<FieldMapperInput, FieldMapperOutpu
             case 'rename':
               result[mapping.targetField] = sourceValue
               break
-            case 'cast':
-              result[mapping.targetField] = this.castValue(sourceValue, mapping.transformValue)
-              break
             case 'function':
-              result[mapping.targetField] = this.applyFunction(sourceValue, mapping.transformValue)
+              if (mapping.parameters?.functionBody) {
+                try {
+                  const func = new Function('value', mapping.parameters.functionBody)
+                  result[mapping.targetField] = func(sourceValue)
+                } catch {
+                  result[mapping.targetField] = sourceValue
+                }
+              } else {
+                result[mapping.targetField] = sourceValue
+              }
               break
-            case 'default':
-              result[mapping.targetField] = sourceValue || mapping.transformValue
+            case 'constant':
+              result[mapping.targetField] = mapping.parameters?.constantValue
               break
           }
         })
@@ -63,7 +137,7 @@ export class FieldMapperNode extends BaseNode<FieldMapperInput, FieldMapperOutpu
         },
         metrics: {
           executionTime,
-          recordsProcessed: mapped.length
+          recordsProcessed: sourceData.length
         }
       }
     } catch (error) {
@@ -74,35 +148,9 @@ export class FieldMapperNode extends BaseNode<FieldMapperInput, FieldMapperOutpu
     }
   }
   
-  private castValue(value: any, targetType: string): any {
-    switch (targetType) {
-      case 'string':
-        return String(value)
-      case 'number':
-        return Number(value)
-      case 'boolean':
-        return Boolean(value)
-      default:
-        return value
-    }
-  }
-  
-  private applyFunction(value: any, functionName: string): any {
-    switch (functionName) {
-      case 'uppercase':
-        return String(value).toUpperCase()
-      case 'lowercase':
-        return String(value).toLowerCase()
-      case 'trim':
-        return String(value).trim()
-      default:
-        return value
-    }
-  }
-  
   validate(input: FieldMapperInput): boolean {
     return super.validate(input) && 
-           !!input.source && 
+           (Array.isArray(input.source) || typeof input.source === 'object') &&
            Array.isArray(input.mapping)
   }
 }

@@ -1,4 +1,4 @@
-import { BaseNode } from '../../base/base-node'
+import { BaseNode, NodeMetadata } from '../../base/base-node'
 import { NodeResult } from '../../interfaces/node.interface'
 
 interface FilterCondition {
@@ -21,6 +21,76 @@ export class DataFilterNode extends BaseNode<DataFilterInput, DataFilterOutput, 
   readonly type = 'data-filter'
   readonly version = '1.0.0'
   readonly category = 'transformation'
+  
+  static getMetadata(): NodeMetadata {
+    return {
+      type: 'data-filter',
+      name: 'Data Filter',
+      description: 'Filters array data based on configurable conditions with support for multiple operators',
+      version: '1.0.0',
+      category: 'transformation',
+      icon: 'filter',
+      inputs: [
+        {
+          name: 'data',
+          type: 'array',
+          required: true,
+          description: 'Array of objects to filter'
+        },
+        {
+          name: 'conditions',
+          type: 'array',
+          required: true,
+          description: 'Array of filter conditions to apply',
+          defaultValue: [
+            {
+              field: 'status',
+              operator: 'equals',
+              value: 'active'
+            }
+          ]
+        }
+      ],
+      outputs: [
+        {
+          name: 'filtered',
+          type: 'array',
+          description: 'Filtered array of objects that match all conditions',
+          schema: {
+            type: 'array',
+            items: { type: 'object' }
+          }
+        },
+        {
+          name: 'filtered_count',
+          type: 'number',
+          description: 'Number of items that passed the filter conditions'
+        }
+      ],
+      compatibilityMatrix: [
+        {
+          targetType: 'field-mapper',
+          outputPin: 'filtered',
+          targetInputPin: 'source',
+          compatibility: 'full'
+        },
+        {
+          targetType: 'mongodb-operations',
+          outputPin: 'filtered',
+          targetInputPin: 'data',
+          compatibility: 'full'
+        }
+      ],
+      configuration: {
+        timeout: 10000,
+        retries: 2,
+        concurrency: 1,
+        batchSize: 5000
+      },
+      tags: ['transformation', 'filter', 'data-processing'],
+      relatedNodes: ['field-mapper', 'postgresql-query', 'mongodb-operations']
+    }
+  }
   
   async execute(input: DataFilterInput): Promise<NodeResult<DataFilterOutput>> {
     const startTime = Date.now()

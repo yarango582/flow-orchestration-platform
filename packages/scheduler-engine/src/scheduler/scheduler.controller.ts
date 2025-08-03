@@ -27,6 +27,7 @@ import {
   ScheduleDto,
   PaginatedSchedulesDto,
   ExecutionDto,
+  ExecutionDetailDto,
   PaginatedExecutionsDto,
   BulkOperationResultDto,
   JobStatsDto,
@@ -218,13 +219,13 @@ export class SchedulerController {
   @ApiResponse({
     status: 200,
     description: 'Execution details retrieved',
-    type: ExecutionDto,
+    type: ExecutionDetailDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Execution not found',
   })
-  async getExecutionById(@Param('id', ParseUUIDPipe) id: string): Promise<ExecutionDto> {
+  async getExecutionById(@Param('id', ParseUUIDPipe) id: string): Promise<ExecutionDetailDto> {
     return this.schedulerService.getExecutionById(id);
   }
 

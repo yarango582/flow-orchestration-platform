@@ -31,10 +31,14 @@ export class FlowService {
    * Get flow by ID
    */
   async getFlow(id: string): Promise<Flow> {
-    const response = await apiClient.get<{ data: Flow }>(
+    const response = await apiClient.get<any>(
       apiClient.getUrl(`/flows/${id}`)
     )
-    return response.data
+    console.log('Flow service - API response:', response)
+    // Check if the response has nested data structure
+    const flowData = response.data?.data || response.data
+    console.log('Flow service - extracted flow data:', flowData)
+    return flowData
   }
 
   /**

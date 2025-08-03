@@ -150,12 +150,34 @@ export class FlowExecutionProcessor {
         result.error,
       );
 
-      // Update records processed if available
-      if (result.recordsProcessed) {
-        await this.executionRepository.update(execution.id, {
-          recordsProcessed: result.recordsProcessed,
-        });
+      // Update records processed and node results if available
+      const updateData: any = {
+        recordsProcessed: result.recordsProcessed || 0,
+      };
+
+      // Convert nodeResults Map to array for storage
+      if (result.nodeResults && result.nodeResults.size > 0) {
+        const nodeExecutions = Array.from(result.nodeResults.entries()).map(
+          ([nodeId, nodeResult]) => ({
+            nodeId,
+            nodeType: flow.nodes.find(n => n.id === nodeId)?.type || 'unknown',
+            status: nodeResult.success ? ExecutionStatus.SUCCESS : ExecutionStatus.FAILED,
+            startTime: new Date(), // TODO: Get actual start time from orchestrator
+            endTime: new Date(),
+            duration: nodeResult.metrics?.executionTime || 0,
+            recordsProcessed: nodeResult.metrics?.recordsProcessed || 0,
+            errorMessage: nodeResult.error,
+          })
+        );
+        updateData.nodeExecutions = nodeExecutions;
       }
+
+      // Store logs if available
+      if (result.logs && result.logs.length > 0) {
+        updateData.logs = result.logs;
+      }
+
+      await this.executionRepository.update(execution.id, updateData);
 
       // Emit completion event
       if (result.success) {

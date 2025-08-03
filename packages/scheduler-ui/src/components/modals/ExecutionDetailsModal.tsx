@@ -278,7 +278,15 @@ const ExecutionDetailsModal: React.FC<ExecutionDetailsModalProps> = ({
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="bg-white p-4 rounded-lg border"><div className="flex items-center">{getStatusIcon(execution.status)}<span className="ml-2 font-medium text-gray-900">Status</span></div><p className="mt-1 text-2xl font-semibold capitalize">{execution.status}</p></div>
                         <div className="bg-white p-4 rounded-lg border"><div className="flex items-center"><ClockIcon className="w-5 h-5 text-gray-400" /><span className="ml-2 font-medium text-gray-900">Duration</span></div><p className="mt-1 text-2xl font-semibold">{formatDuration(execution.startTime, execution.endTime)}</p></div>
-                        <div className="bg-white p-4 rounded-lg border"><div className="flex items-center"><DocumentTextIcon className="w-5 h-5 text-gray-400" /><span className="ml-2 font-medium text-gray-900">Records</span></div><p className="mt-1 text-2xl font-semibold">{execution.recordsProcessed.toLocaleString()}</p></div>
+                        <div className="bg-white p-4 rounded-lg border"><div className="flex items-center"><DocumentTextIcon className="w-5 h-5 text-gray-400" /><span className="ml-2 font-medium text-gray-900">Records</span></div><p className="mt-1 text-2xl font-semibold">{(() => {
+                          // Si recordsProcessed de la ejecución es 0, calculamos desde los nodos
+                          const executionRecords = execution.recordsProcessed || 0;
+                          if (executionRecords === 0 && execution.nodeExecutions?.length > 0) {
+                            const totalFromNodes = execution.nodeExecutions.reduce((sum, node) => sum + (node.recordsProcessed || 0), 0);
+                            return totalFromNodes.toLocaleString();
+                          }
+                          return executionRecords.toLocaleString();
+                        })()}</p></div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="bg-white p-4 rounded-lg border"><h3 className="text-lg font-medium text-gray-900 mb-3">Execution Info</h3><dl className="space-y-3"><div className="flex justify-between"><dt className="text-sm text-gray-500">Execution ID</dt><dd className="text-sm text-gray-800 font-mono">{execution.id}</dd></div><div className="flex justify-between"><dt className="text-sm text-gray-500">Flow ID</dt><dd className="text-sm text-gray-800 font-mono">{execution.flowId}</dd></div>{execution.scheduleId && <div className="flex justify-between"><dt className="text-sm text-gray-500">Schedule ID</dt><dd className="text-sm text-gray-800 font-mono">{execution.scheduleId}</dd></div>}<div className="flex justify-between"><dt className="text-sm text-gray-500">Retry Count</dt><dd className="text-sm text-gray-800">{execution.retryCount}</dd></div></dl></div>
@@ -292,7 +300,95 @@ const ExecutionDetailsModal: React.FC<ExecutionDetailsModalProps> = ({
                   {activeTab === 'nodes' && (
                     <div className="space-y-4">
                       <h3 className="text-lg font-medium text-gray-900">Node Executions</h3>
-                      <p className="text-gray-500">Node execution details are not available yet. This feature will be implemented when the backend provides node-level execution data.</p>
+                      {execution?.nodeExecutions && execution.nodeExecutions.length > 0 ? (
+                        <div className="space-y-3">
+                          {execution.nodeExecutions.map((nodeExecution, index) => (
+                            <div key={`${nodeExecution.nodeId}-${index}`} className="bg-gray-50 border rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center space-x-3">
+                                  <h4 className="font-medium text-gray-900">
+                                    Node {nodeExecution.nodeId}
+                                  </h4>
+                                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                    {nodeExecution.nodeType}
+                                  </span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  {nodeExecution.status === 'success' ? (
+                                    <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                                  ) : nodeExecution.status === 'failed' ? (
+                                    <XCircleIcon className="h-5 w-5 text-red-500" />
+                                  ) : nodeExecution.status === 'running' ? (
+                                    <ArrowPathIcon className="h-5 w-5 text-blue-500 animate-spin" />
+                                  ) : (
+                                    <ClockIcon className="h-5 w-5 text-gray-400" />
+                                  )}
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                    nodeExecution.status === 'success' 
+                                      ? 'bg-green-100 text-green-800'
+                                      : nodeExecution.status === 'failed' 
+                                      ? 'bg-red-100 text-red-800'
+                                      : nodeExecution.status === 'running'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {nodeExecution.status.charAt(0).toUpperCase() + nodeExecution.status.slice(1)}
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                  <dt className="text-sm font-medium text-gray-500">Records Processed</dt>
+                                  <dd className="text-lg font-semibold text-gray-900">
+                                    {nodeExecution.recordsProcessed?.toLocaleString() || 0}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-sm font-medium text-gray-500">Duration</dt>
+                                  <dd className="text-lg font-semibold text-gray-900">
+                                    {nodeExecution.duration ? `${nodeExecution.duration}ms` : 'N/A'}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-sm font-medium text-gray-500">Start Time</dt>
+                                  <dd className="text-sm text-gray-900">
+                                    {format(new Date(nodeExecution.startTime), 'HH:mm:ss.SSS')}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-sm font-medium text-gray-500">End Time</dt>
+                                  <dd className="text-sm text-gray-900">
+                                    {nodeExecution.endTime 
+                                      ? format(new Date(nodeExecution.endTime), 'HH:mm:ss.SSS')
+                                      : 'N/A'
+                                    }
+                                  </dd>
+                                </div>
+                              </div>
+                              
+                              {nodeExecution.errorMessage && (
+                                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                                  <div className="flex">
+                                    <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+                                    <div className="ml-3">
+                                      <h4 className="text-sm font-medium text-red-800">Error</h4>
+                                      <p className="text-sm text-red-700 mt-1">{nodeExecution.errorMessage}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-32 text-gray-500">
+                          <div className="text-center">
+                            <DocumentTextIcon className="h-12 w-12 text-gray-300 mx-auto mb-2" />
+                            <p>No node execution details available for this execution.</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

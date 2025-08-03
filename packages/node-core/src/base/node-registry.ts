@@ -1,4 +1,5 @@
 import { INode } from '../interfaces/node.interface'
+import { BaseNode, NodeMetadata } from './base-node'
 
 export class NodeRegistry {
   private nodes: Map<string, any> = new Map()
@@ -29,26 +30,50 @@ export class NodeRegistry {
     return this.nodes.has(type)
   }
 
-  getNodeMetadata(type: string): any {
+  getNodeMetadata(type: string): NodeMetadata | null {
     const NodeClass = this.nodes.get(type)
     if (!NodeClass) {
       return null
     }
     
-    // Create temporary instance to get metadata
+    // Call static getMetadata method if it exists
+    if (typeof NodeClass.getMetadata === 'function') {
+      try {
+        return NodeClass.getMetadata()
+      } catch (error) {
+        console.warn(`Failed to get metadata for node type '${type}':`, error)
+        return null
+      }
+    }
+    
+    // Fallback: create temporary instance to get basic metadata
     try {
       const instance = new NodeClass()
       return {
         type: instance.type || type,
+        name: instance.constructor.name.replace(/Node$/, ''),
+        description: `Auto-generated metadata for ${type}`,
         version: instance.version || '1.0.0',
-        category: instance.category || 'transformation'
+        category: instance.category || 'transformation',
+        inputs: [],
+        outputs: []
       }
-    } catch {
-      return {
-        type,
-        version: '1.0.0',
-        category: 'transformation'
+    } catch (error) {
+      console.warn(`Failed to create instance for metadata of node type '${type}':`, error)
+      return null
+    }
+  }
+
+  getAllNodesMetadata(): Map<string, NodeMetadata> {
+    const metadata = new Map<string, NodeMetadata>()
+    
+    for (const [type] of this.nodes) {
+      const nodeMetadata = this.getNodeMetadata(type)
+      if (nodeMetadata) {
+        metadata.set(type, nodeMetadata)
       }
     }
+    
+    return metadata
   }
 }
